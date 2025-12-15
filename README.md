@@ -12,8 +12,8 @@ This repository contains the complete design resources, source code, and measure
 
 ### 📂 Code
 This folder contains the firmware source code. It includes two distinct sets of code:
-* **Custom Sensor:** Code developed for our self-fabricated sensor modules.
-* **Department Sensor:** Code tailored for the sensor provided by the department.
+* **Autonomous_Nodes_Environmental_Sensors:** Code developed for our self-fabricated sensor modules.
+* **Commercial_Sensor:** Code tailored for the sensor provided by the department.
 
 ### 📂 Data
 This folder contains real-world environmental data collected during field testing, organized chronologically by timestamp.
