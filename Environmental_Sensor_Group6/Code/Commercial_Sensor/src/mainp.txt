@@ -1,0 +1,342 @@
+//先build一遍platformio.ini
+#include <Arduino.h>
+#include <Wire.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h> //graphical drawing
+#include <Adafruit_SSD1306.h> //OLED display
+#include <Adafruit_GPS.h> //GPS
+#include <SD.h> //SD card
+#include <Adafruit_Sensor.h>
+#include "Adafruit_BME680.h"
+#include <vl53l4cx_class.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <assert.h>
+
+#ifndef PIN_I2C_POWER
+#define PIN_I2C_POWER 7            // Feather S3's STEMMA/QT power supply control pin
+#endif
+
+#define ToF_ADDR  0x29
+#define GPS_ADDR  0x10
+#define BME_ADDR  0x77
+#define OLED_ADDR   0x3D          
+#define OLED_RESET  10             
+#define SD_CS 13                   // SD SPI CS pin
+#define SEALEVELPRESSURE_HPA (1013.25)
+#define DEV_I2C Wire
+#define SerialPort Serial
+
+
+Adafruit_BME680 bme(&Wire); // I2C
+Adafruit_SSD1306 display(128, 64, &Wire, OLED_RESET); //OLED display
+File myFile; //SD
+Adafruit_GPS GPS(&Wire);// Connect to the GPS on the hardware I2C port
+VL53L4CX ToF(&DEV_I2C, A1);
+
+static void hardResetOLED() {
+  pinMode(OLED_RESET, OUTPUT);
+  digitalWrite(OLED_RESET, HIGH);
+  delay(10);
+  digitalWrite(OLED_RESET, LOW);    // Hold low level for more than 10ms
+  delay(15);
+  digitalWrite(OLED_RESET, HIGH);   // Reset Release
+  delay(50);
+}
+
+void I2C_Init(){
+  // 1) Turn on the power of the I2C peripheral.
+  pinMode(PIN_I2C_POWER, OUTPUT);
+  digitalWrite(PIN_I2C_POWER, HIGH);
+  delay(50);                        // provide time for power-up reset pin of OLED
+  Serial.println(F("I2C power enabled."));
+  // 2)To start I2C: Use the slow speed first to rule out timing issues.
+  Wire.begin();                     
+  Wire.setClock(100000);
+  delay(100);// give some time to settle I2C
+  Serial.println(F("I2C started at 100kHz."));
+}
+
+void OLED_Init(){
+  bool ok = display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+  Serial.println(ok ? F("SSD1306 begin (SWITCHCAPVCC) OK")
+                    : F("SSD1306 begin (SWITCHCAPVCC) FAIL"));
+
+  if (!ok) {
+    hardResetOLED();
+    ok = display.begin(SSD1306_EXTERNALVCC, OLED_ADDR);
+    Serial.println(ok ? F("SSD1306 begin (EXTERNALVCC) OK")
+                      : F("SSD1306 begin (EXTERNALVCC) FAIL"));
+  }
+
+  if (ok) {
+    display.ssd1306_command(SSD1306_DISPLAYON);
+    display.ssd1306_command(SSD1306_SETCONTRAST);
+    display.ssd1306_command(0xFF);
+
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println(F("HELLO"));
+    display.drawRect(0, 0, 128, 64, SSD1306_WHITE);
+    display.display();
+  } else {
+    Serial.println(F("OLED init failed."));
+  }
+}
+
+void Display_update(){
+
+}
+
+void ToF_Init(){
+
+  // pinMode(LedPin, OUTPUT);
+
+  // Initialize I2C bus.
+  DEV_I2C.begin();
+
+  // Configure VL53L4CX satellite component.
+  ToF.begin();
+
+  // Switch off VL53L4CX satellite component.
+  ToF.VL53L4CX_Off();
+
+  //Initialize VL53L4CX satellite component.
+  ToF.InitSensor(ToF_ADDR);
+
+  // Start Measurements
+  ToF.VL53L4CX_StartMeasurement();
+}
+
+void ToF_Read(){
+  
+  VL53L4CX_MultiRangingData_t MultiRangingData;
+  VL53L4CX_MultiRangingData_t *pMultiRangingData = &MultiRangingData;
+  uint8_t NewDataReady = 0;
+  int no_of_object_found = 0, j;
+  char report[64];
+  int status;
+
+  do {
+    status = ToF.VL53L4CX_GetMeasurementDataReady(&NewDataReady);
+  } while (!NewDataReady);
+
+  //Led on
+  // digitalWrite(LedPin, HIGH);
+
+  if ((!status) && (NewDataReady != 0)) {
+    status = ToF.VL53L4CX_GetMultiRangingData(pMultiRangingData);
+    no_of_object_found = pMultiRangingData->NumberOfObjectsFound;
+    snprintf(report, sizeof(report), "VL53L4CX Satellite: Count=%d, #Objs=%1d ", pMultiRangingData->StreamCount, no_of_object_found);
+    SerialPort.print(report);
+    for (j = 0; j < no_of_object_found; j++) {
+      if (j != 0) {
+        SerialPort.print("\r\n                               ");
+      }
+      SerialPort.print("status=");
+      SerialPort.print(pMultiRangingData->RangeData[j].RangeStatus);
+      SerialPort.print(", D=");
+      SerialPort.print(pMultiRangingData->RangeData[j].RangeMilliMeter);
+      SerialPort.print("mm");
+      SerialPort.print(", Signal=");
+      SerialPort.print((float)pMultiRangingData->RangeData[j].SignalRateRtnMegaCps / 65536.0);
+      SerialPort.print(" Mcps, Ambient=");
+      SerialPort.print((float)pMultiRangingData->RangeData[j].AmbientRateRtnMegaCps / 65536.0);
+      SerialPort.print(" Mcps");
+    }
+    SerialPort.println("");
+    if (status == 0) {
+      status = ToF.VL53L4CX_ClearInterruptAndStartMeasurement();
+    }
+  }
+
+  // digitalWrite(LedPin, LOW);
+}
+
+void BME_Init(){
+  if (!bme.begin(BME_ADDR)) {
+    Serial.println("Could not find a valid BME680 sensor, check wiring!");
+    while (1);
+  }
+  // Set up oversampling and filter initialization
+  bme.setTemperatureOversampling(BME680_OS_8X);
+  bme.setHumidityOversampling(BME680_OS_2X);
+  bme.setPressureOversampling(BME680_OS_4X);
+  bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+  bme.setGasHeater(320, 150); // 320*C for 150 ms
+}
+
+void BME_Read(){ 
+  if (! bme.performReading()) {
+    Serial.println("Failed to perform reading :(");
+    return;
+  }
+  Serial.print("Temperature = ");
+  Serial.print(bme.temperature);
+  Serial.println(" *C");
+
+  Serial.print("Pressure = ");
+  Serial.print(bme.pressure / 100.0);
+  Serial.println(" hPa");
+
+  Serial.print("Humidity = ");
+  Serial.print(bme.humidity);
+  Serial.println(" %");
+
+  Serial.print("Gas = ");
+  Serial.print(bme.gas_resistance / 1000.0);
+  Serial.println(" KOhms");
+
+  Serial.print("Approx. Altitude = ");
+  Serial.print(bme.readAltitude(SEALEVELPRESSURE_HPA));
+  Serial.println(" m");
+}
+
+void GPS_Init(){ 
+    if (!GPS.begin(GPS_ADDR)) {
+      Serial.println("GPS I2C init failed");
+    } else {
+      
+      GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
+      GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
+      Serial.println("GPS ready (I2C).");
+    }
+}
+
+void GPS_Read(){
+  GPS.read();                                
+  if (GPS.newNMEAreceived()) {               
+    if (!GPS.parse(GPS.lastNMEA())) return;  
+    if (GPS.fix) { 
+      Serial.print("Lat: "); Serial.println(GPS.latitude, 4);
+      Serial.print("Lon: "); Serial.println(GPS.longitude, 4);
+    }
+  }
+}
+
+void SD_Init(){
+  Serial.print("Initializing SD card...");
+  pinMode(10, OUTPUT);
+  if (!SD.begin(SD_CS)) {
+    Serial.println("initialization failed!");
+    return;
+  }
+  Serial.println("initialization done.");
+}
+
+// void SD_Init() {  
+//   SPI.begin(/*SCK*/36, /*MISO*/37, /*MOSI*/35, /*SS*/SD_CS);
+//   if (!SD.begin(SD_CS, SPI, 25000000)) { 
+//     Serial.println("SD init failed");
+//     while (1) {}
+//   }
+//   Serial.println("SD init OK");
+// }
+
+
+void SD_Write(){
+  // open the file. note that only one file can be open at a time,
+  myFile = SD.open("test.txt", FILE_WRITE);
+  // if the file opened okay, write to it:
+  if (myFile) {
+    Serial.print("Writing to test.txt...");
+    myFile.println("testing 1, 2, 3.");
+    // close the file:
+    myFile.close();
+    Serial.println("done.");
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening test.txt");
+  }
+}
+
+void SD_Read(){ 
+  // open the file for reading:
+  myFile = SD.open("test.txt");
+  if (myFile) {
+  Serial.println("test.txt:");
+  // read from the file until there's nothing else in it:
+  while (myFile.available()) {
+  Serial.write(myFile.read());
+  }
+  // close the file:
+  myFile.close();
+  } else {
+  // if the file didn't open, print an error:
+  Serial.println("error opening test.txt");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(100);
+  Serial.println(F("Setup started."));
+  I2C_Init();
+  OLED_Init();
+  SD_Init();
+  GPS_Init();
+  BME_Init();
+  ToF_Init();
+}
+
+void loop() {
+  // Serial.println(F("Looping..."));
+  // delay(2000);
+  GPS_Read();
+  BME_Read();
+  ToF_Read();
+  Display_update();
+  SD_Write();
+}
+
+
+
+
+
+#include <Arduino.h>
+#include "ble_manager.h"
+
+
+void setupPeripherals() {
+  // TODO: init sensors / display / sd / wifi
+}
+
+void serviceOtherPeripheralsNonBlocking() {
+ 
+  
+
+}
+
+void setup() {
+  Serial.begin(115200);
+  setupPeripherals();
+
+
+  BLEManager::begin(/*queueDepth*/64, /*scanMs*/4000, /*restMs*/2000);
+}
+
+void loop() {
+ 
+  BLEManager::loopTick();
+// Retrieve BLE packets non-blockingly and process them as needed.
+  BlePacket pkt;
+  while (BLEManager::getPacket(pkt)) {
+    if (pkt.src == Src::ACC) {
+      
+      // Serial.printf("[ACC] %u bytes\n", pkt.len);
+    } else {
+      
+      // Serial.printf("[PPG] %u bytes\n", pkt.len);
+    }
+  }
+
+
+  serviceOtherPeripheralsNonBlocking();
+
+
+  delay(1);
+}

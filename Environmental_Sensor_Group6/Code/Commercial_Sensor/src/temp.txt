@@ -1,0 +1,436 @@
+
+
+#include <Arduino.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+// ====== Display parameters ======
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+
+// I2C address: 128x64 (commonly used, also sometimes marked with 0x3D on the module)
+#define OLED_RESET     -1
+#define SCREEN_ADDRESS 0x3D
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+#define NUMFLAKES   10
+#define LOGO_HEIGHT 16
+#define LOGO_WIDTH  16
+
+
+static const unsigned char PROGMEM logo_bmp[] = {
+  0b00000000, 0b11000000,
+  0b00000001, 0b11000000,
+  0b00000001, 0b11000000,
+  0b00000011, 0b11100000,
+  0b11110011, 0b11100000,
+  0b11111110, 0b11111000,
+  0b01111110, 0b11111111,
+  0b00110011, 0b10011111,
+  0b00011111, 0b11111100,
+  0b00001101, 0b01110000,
+  0b00011011, 0b10100000,
+  0b00111111, 0b11100000,
+  0b00111111, 0b11110000,
+  0b01111100, 0b11110000,
+  0b01110000, 0b01110000,
+  0b00000000, 0b00110000
+};
+
+// ====== 前置声明（PlatformIO 需要）======
+void testdrawline();
+void testdrawrect();
+void testfillrect();
+void testdrawcircle();
+void testfillcircle();
+void testdrawroundrect();
+void testfillroundrect();
+void testdrawtriangle();
+void testfilltriangle();
+void testdrawchar();
+void testdrawstyles();
+void testscrolltext();
+void testdrawbitmap();
+void testanimate(const uint8_t *bitmap, uint8_t w, uint8_t h);
+
+// ====== Settings and Main Loop ======
+void setup() {
+  Serial.begin(115200);
+
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;)
+      delay(10);
+  }
+
+  display.display();
+  delay(1000);
+  display.clearDisplay();
+
+  display.drawPixel(10, 10, SSD1306_WHITE);
+  display.display();
+  delay(1000);
+
+  testdrawline();
+  testdrawrect();
+  testfillrect();
+  testdrawcircle();
+  testfillcircle();
+  testdrawroundrect();
+  testfillroundrect();
+  testdrawtriangle();
+  testfilltriangle();
+  testdrawchar();
+  testdrawstyles();
+  testscrolltext();
+  testdrawbitmap();
+
+  display.invertDisplay(true);  delay(500);
+  display.invertDisplay(false); delay(500);
+
+  testanimate(logo_bmp, LOGO_WIDTH, LOGO_HEIGHT);
+}
+
+void loop() {
+  // All demos run within setup; loop is left empty.
+}
+
+void testdrawline() {
+  int16_t i;
+  display.clearDisplay();
+
+  for (i = 0; i < display.width(); i += 4) {
+    display.drawLine(0, 0, i, display.height() - 1, SSD1306_WHITE);
+    display.display();
+    delay(1);
+  }
+  for (i = 0; i < display.height(); i += 4) {
+    display.drawLine(0, 0, display.width() - 1, i, SSD1306_WHITE);
+    display.display();
+    delay(1);
+  }
+  delay(250);
+
+  display.clearDisplay();
+  for (i = 0; i < display.width(); i += 4) {
+    display.drawLine(0, display.height() - 1, i, 0, SSD1306_WHITE);
+    display.display();
+    delay(1);
+  }
+  for (i = display.height() - 1; i >= 0; i -= 4) {
+    display.drawLine(0, display.height() - 1, display.width() - 1, i, SSD1306_WHITE);
+    display.display();
+    delay(1);
+  }
+  delay(250);
+
+  display.clearDisplay();
+  for (i = display.width() - 1; i >= 0; i -= 4) {
+    display.drawLine(display.width() - 1, display.height() - 1, i, 0, SSD1306_WHITE);
+    display.display();
+    delay(1);
+  }
+  for (i = display.height() - 1; i >= 0; i -= 4) {
+    display.drawLine(display.width() - 1, display.height() - 1, 0, i, SSD1306_WHITE);
+    display.display();
+    delay(1);
+  }
+  delay(250);
+
+  display.clearDisplay();
+  for (i = 0; i < display.height(); i += 4) {
+    display.drawLine(display.width() - 1, 0, 0, i, SSD1306_WHITE);
+    display.display();
+    delay(1);
+  }
+  for (i = 0; i < display.width(); i += 4) {
+    display.drawLine(display.width() - 1, 0, i, display.height() - 1, SSD1306_WHITE);
+    display.display();
+    delay(1);
+  }
+  delay(1000);
+}
+
+void testdrawrect(void) {
+  display.clearDisplay();
+  for (int16_t i = 0; i < display.height() / 2; i += 2) {
+    display.drawRect(i, i, display.width() - 2 * i, display.height() - 2 * i, SSD1306_WHITE);
+    display.display();
+    delay(1);
+  }
+  delay(1000);
+}
+
+void testfillrect(void) {
+  display.clearDisplay();
+  for (int16_t i = 0; i < display.height() / 2; i += 3) {
+    display.fillRect(i, i, display.width() - i * 2, display.height() - i * 2, SSD1306_INVERSE);
+    display.display();
+    delay(1);
+  }
+  delay(1000);
+}
+
+void testdrawcircle(void) {
+  display.clearDisplay();
+  for (int16_t i = 0; i < max(display.width(), display.height()) / 2; i += 2) {
+    display.drawCircle(display.width() / 2, display.height() / 2, i, SSD1306_WHITE);
+    display.display();
+    delay(1);
+  }
+  delay(1000);
+}
+
+void testfillcircle(void) {
+  display.clearDisplay();
+  for (int16_t i = max(display.width(), display.height()) / 2; i > 0; i -= 3) {
+    display.fillCircle(display.width() / 2, display.height() / 2, i, SSD1306_INVERSE);
+    display.display();
+    delay(1);
+  }
+  delay(1000);
+}
+
+void testdrawroundrect(void) {
+  display.clearDisplay();
+  for (int16_t i = 0; i < display.height() / 2 - 2; i += 2) {
+    display.drawRoundRect(i, i, display.width() - 2 * i, display.height() - 2 * i,
+                          display.height() / 4, SSD1306_WHITE);
+    display.display();
+    delay(1);
+  }
+  delay(1000);
+}
+
+void testfillroundrect(void) {
+  display.clearDisplay();
+  for (int16_t i = 0; i < display.height() / 2 - 2; i += 2) {
+    display.fillRoundRect(i, i, display.width() - 2 * i, display.height() - 2 * i,
+                          display.height() / 4, SSD1306_INVERSE);
+    display.display();
+    delay(1);
+  }
+  delay(1000);
+}
+
+void testdrawtriangle(void) {
+  display.clearDisplay();
+  for (int16_t i = 0; i < max(display.width(), display.height()) / 2; i += 5) {
+    display.drawTriangle(
+      display.width() / 2,     display.height() / 2 - i,
+      display.width() / 2 - i, display.height() / 2 + i,
+      display.width() / 2 + i, display.height() / 2 + i,
+      SSD1306_WHITE
+    );
+    display.display();
+    delay(1);
+  }
+  delay(1000);
+}
+
+void testfilltriangle(void) {
+  display.clearDisplay();
+  for (int16_t i = max(display.width(), display.height()) / 2; i > 0; i -= 5) {
+    display.fillTriangle(
+      display.width() / 2,     display.height() / 2 - i,
+      display.width() / 2 - i, display.height() / 2 + i,
+      display.width() / 2 + i, display.height() / 2 + i,
+      SSD1306_INVERSE
+    );
+    display.display();
+    delay(1);
+  }
+  delay(1000);
+}
+
+void testdrawchar(void) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.cp437(true);
+
+  for (int16_t i = 0; i < 256; i++) {
+    if (i == '\n') display.write(' ');
+    else           display.write(i);
+  }
+  display.display();
+  delay(1000);
+}
+
+void testdrawstyles(void) {
+  display.clearDisplay();
+
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println(F("Hello, world!"));
+
+  display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
+  display.println(3.141592);
+
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.print(F("0x"));
+  display.println(0xDEADBEEF, HEX);
+
+  display.display();
+  delay(1000);
+}
+
+void testscrolltext(void) {
+  display.clearDisplay();
+
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(10, 0);
+  display.println(F("scroll"));
+  display.display();
+  delay(100);
+
+  display.startscrollright(0x00, 0x0F);
+  delay(1500);
+  display.stopscroll();
+  delay(500);
+  display.startscrollleft(0x00, 0x0F);
+  delay(1500);
+  display.stopscroll();
+  delay(500);
+  display.startscrolldiagright(0x00, 0x07);
+  delay(1500);
+  display.startscrolldiagleft(0x00, 0x07);
+  delay(1500);
+  display.stopscroll();
+  delay(500);
+}
+
+void testdrawbitmap(void) {
+  display.clearDisplay();
+  display.drawBitmap(
+    (display.width()  - LOGO_WIDTH ) / 2,
+    (display.height() - LOGO_HEIGHT) / 2,
+    logo_bmp, LOGO_WIDTH, LOGO_HEIGHT, 1
+  );
+  display.display();
+  delay(800);
+}
+
+#define XPOS   0
+#define YPOS   1
+#define DELTAY 2
+
+void testanimate(const uint8_t *bitmap, uint8_t w, uint8_t h) {
+  int8_t f, icons[NUMFLAKES][3];
+
+  for (f = 0; f < NUMFLAKES; f++) {
+    icons[f][XPOS]   = random(1 - (int)LOGO_WIDTH, display.width());
+    icons[f][YPOS]   = -LOGO_HEIGHT;
+    icons[f][DELTAY] = random(1, 6);
+    Serial.print(F("x: "));  Serial.print(icons[f][XPOS], DEC);
+    Serial.print(F(" y: ")); Serial.print(icons[f][YPOS], DEC);
+    Serial.print(F(" dy: "));Serial.println(icons[f][DELTAY], DEC);
+  }
+
+  for (;;) {
+    display.clearDisplay();
+    for (f = 0; f < NUMFLAKES; f++) {
+      display.drawBitmap(icons[f][XPOS], icons[f][YPOS], bitmap, w, h, SSD1306_WHITE);
+    }
+    display.display();
+    delay(200);
+
+    for (f = 0; f < NUMFLAKES; f++) {
+      icons[f][YPOS] += icons[f][DELTAY];
+      if (icons[f][YPOS] >= display.height()) {
+        icons[f][XPOS]   = random(1 - (int)LOGO_WIDTH, display.width());
+        icons[f][YPOS]   = -LOGO_HEIGHT;
+        icons[f][DELTAY] = random(1, 6);
+      }
+    }
+  }
+}
+
+
+
+
+#include <Arduino.h>
+#include <Wire.h>
+
+
+#define OLED_ADDR 0x3D
+
+#ifndef PIN_I2C_POWER
+#define PIN_I2C_POWER 7 
+#endif
+
+void scan_i2c() {
+  Serial.println(F("\n[I2C] Scanning..."));
+  uint8_t found = 0;
+
+  for (uint8_t addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    uint8_t err = Wire.endTransmission();   // 0=ACK
+    if (err == 0) {
+      Serial.print(F("  - found device at 0x"));
+      if (addr < 16) Serial.print("0");
+      Serial.print(addr, HEX);
+      Serial.println();
+      found++;
+    }
+    delay(2);
+  }
+  if (!found) Serial.println(F("  (no I2C devices found)"));
+}
+
+bool read_max17048_demo() {
+  const uint8_t kAddr = 0x36;          // MAX17048/49
+  Wire.beginTransmission(kAddr);
+  Wire.write(0x02);                     // VCELL register MSB
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom((int)kAddr, 2) != 2) return false;
+  uint16_t raw = (Wire.read() << 8) | Wire.read();
+  // MAX17048: 78.125 uV/LSB，Calculate the voltage (approximate value).
+  float voltage = (raw >> 4) * 0.00125f; // 1.25 mV/LSB
+  Serial.print(F("[MAX17048] VCELL ≈ "));
+  Serial.print(voltage, 3);
+  Serial.println(F(" V"));
+  return true;
+}
+
+void setup() {
+  Serial.begin(115200);
+  while (!Serial) { delay(10); }
+
+  // 1) Turn on STEMMA QT I2C power supply
+  pinMode(PIN_I2C_POWER, OUTPUT);
+  digitalWrite(PIN_I2C_POWER, HIGH);
+  delay(10);
+
+
+  Serial.println(F("\n===== I2C bring-up ====="));
+  Serial.print(F("SDA pin = ")); Serial.println(SDA);
+  Serial.print(F("SCL pin = ")); Serial.println(SCL);
+
+  // 3) scanning
+  scan_i2c();
+
+
+  read_max17048_demo();
+
+
+  Serial.print(F("Expect OLED at 0x"));
+  Serial.println(OLED_ADDR, HEX);
+  Serial.println(F("If not found: check 3V3/GND/SDA/SCL & QT power pin."));
+}
+
+void loop() {
+  static uint32_t t0 = 0;
+  if (millis() - t0 > 5000) {
+    t0 = millis();
+    scan_i2c();
+  }
+}
